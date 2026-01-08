@@ -19,6 +19,14 @@ env:
     --description 'Poppy is a Rust crate offering an efficient implementation of Bloom filters. It also includes a command-line utility (also called poppy) allowing users to effortlessly create filters with their desired capacity and false positive probability. Values can be added to the filters via standard input, facilitating the use of this tool in a pipeline workflow.'
     --url 'https://github.com/hashlookup/poppy'
     --license 'BSD-3-Clause'
+  PY_COMMON_FPM_OPTS: >-
+    -s python
+    -n python3-poppy-filters
+    --verbose
+    -d 'poppy-filters'
+    --description 'This is a package providing python bindings for poppy, a bloom filter library written in Rust.'
+    --url 'https://github.com/hashlookup/poppy'
+    --license 'BSD-3-Clause'
 
 jobs:
   release-packages:
@@ -33,7 +41,9 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt install -y git build-essential cargo-1.85 rustc-1.85
+          sudo apt install -y git build-essential cargo-1.85 rustc-1.85 pipenv
+          sudo ln -s /usr/bin/cargo-1.85 /usr/bin/cargo
+          sudo ln -s /usr/bin/rustc-1.85 /usr/bin/rustc
 
       - name: Set env variables
         run: |
@@ -51,7 +61,7 @@ jobs:
         run: |
           git clone -b "poppy-filters-v${{ env.VERSION }}" https://github.com/hashlookup/poppy.git
           cd poppy
-          RUSTFLAGS="-Ctarget-feature=+crt-static" cargo-1.85 build --release --bins --target x86_64-unknown-linux-gnu
+          RUSTFLAGS="-Ctarget-feature=+crt-static" cargo build --release --bins --target x86_64-unknown-linux-gnu
 
       - name: Make DEB release directory
         env:
@@ -73,6 +83,40 @@ jobs:
         with:
           fpm_args: '.'
           fpm_opts: '-t deb -v ${{ env.VERSION }} --iteration ${{ env.ITERATION }} -C release ${{ env.COMMON_FPM_OPTS }} ${{ env.DEB_FPM_OPTS }}'
+
+      - name: Python Build
+        run: |
+          cd poppy/python
+          mkdir .venv
+          python3 -m pipenv install
+          python3 -m pipenv install 'maturin==1.9.1'
+          .venv/bin/maturin build --release --target x86_64-unknown-linux-gnu
+          .venv/bin/maturin develop --release --target x86_64-unknown-linux-gnu
+          
+      - name: Make python DEB release directory
+        env:
+          Build_Version: ${{ github.run_id }}.${{ github.run_number }}.${{ github.run_attempt }}
+        run: |
+          cd poppy/python
+          mkdir release
+          mkdir release/usr
+          mkdir release/usr/lib
+          mkdir release/usr/lib/python3
+          mkdir release/usr/lib/python3/dist-packages
+          mkdir release/usr/share
+          mkdir release/usr/share/python3-poppy-filters
+          cp -r .venv/lib/python3.10/site-packages/poppy release/usr/lib/python3/dist-packages/
+          cp -r .venv/lib/python3.10/site-packages/poppy_py-${{ env.VERSION }}.dist-info release/usr/lib/python3/dist-packages/
+          cp ../poppy/LICENSE release/usr/share/python3-poppy-filters/
+          cp poppy/README.md release/usr/share/python3-poppy-filters/
+          ls -ailR release
+
+      - name: Package python DEB
+        continue-on-error: false
+        uses: bpicode/github-action-fpm@v0.9.3
+        with:
+          fpm_args: '.'
+          fpm_opts: '-t deb -v ${{ env.VERSION }} --iteration ${{ env.ITERATION }} -C release ${{ env.PY_COMMON_FPM_OPTS }} ${{ env.DEB_FPM_OPTS }}'
 
       - name: Release
         continue-on-error: false
