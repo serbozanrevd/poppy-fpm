@@ -20,7 +20,7 @@ env:
     --url 'https://github.com/hashlookup/poppy'
     --license 'BSD-3-Clause'
   PY_COMMON_FPM_OPTS: >-
-    -s python
+    -s dir
     -n python3-poppy-filters
     --verbose
     -d 'poppy-filters'
