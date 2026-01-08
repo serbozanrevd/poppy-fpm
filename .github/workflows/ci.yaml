@@ -105,10 +105,10 @@ jobs:
           mkdir release/usr/lib/python3/dist-packages
           mkdir release/usr/share
           mkdir release/usr/share/python3-poppy-filters
-          cp -r .venv/lib/python3.10/site-packages/poppy release/usr/lib/python3/dist-packages/
-          cp -r .venv/lib/python3.10/site-packages/poppy_py-${{ env.VERSION }}.dist-info release/usr/lib/python3/dist-packages/
-          cp ../poppy/LICENSE release/usr/share/python3-poppy-filters/
-          cp poppy/README.md release/usr/share/python3-poppy-filters/
+          cp -r .venv/lib/python3.12/site-packages/poppy release/usr/lib/python3/dist-packages/
+          cp -r .venv/lib/python3.12/site-packages/poppy_py-${{ env.VERSION }}.dist-info release/usr/lib/python3/dist-packages/
+          cp ../LICENSE release/usr/share/python3-poppy-filters/
+          cp README.md release/usr/share/python3-poppy-filters/
           ls -ailR release
 
       - name: Package python DEB
@@ -116,7 +116,7 @@ jobs:
         uses: bpicode/github-action-fpm@v0.9.3
         with:
           fpm_args: '.'
-          fpm_opts: '-t deb -v ${{ env.VERSION }} --iteration ${{ env.ITERATION }} -C release ${{ env.PY_COMMON_FPM_OPTS }} ${{ env.DEB_FPM_OPTS }}'
+          fpm_opts: '-t deb -v ${{ env.VERSION }} --iteration ${{ env.ITERATION }} -C poppy/python/release ${{ env.PY_COMMON_FPM_OPTS }} ${{ env.DEB_FPM_OPTS }}'
 
       - name: Release
         continue-on-error: false
