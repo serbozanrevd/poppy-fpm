@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 0.2.*
+
+env:
+  TODO: >-
+    --deb-changelog 
+  DEB_FPM_OPTS: >-
+    --prefix '/'
+  COMMON_FPM_OPTS: >-
+    -s dir
+    -n poppy-filters
+    --verbose
+    -a native
+    --description 'Poppy is a Rust crate offering an efficient implementation of Bloom filters. It also includes a command-line utility (also called poppy) allowing users to effortlessly create filters with their desired capacity and false positive probability. Values can be added to the filters via standard input, facilitating the use of this tool in a pipeline workflow.'
+    --url 'https://github.com/hashlookup/poppy'
+    --license 'BSD-3-Clause'
+
+jobs:
+  release-packages:
+    name: Release DEB Package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+    steps:
+      - uses: actions/checkout@v4.0.0
+        with:
+          fetch-depth: 64
+
+      - name: Install Dependencies
+        run: |
+          sudo apt install -y git build-essential cargo-1.85 rustc-1.85
+
+      - name: Set env variables
+        run: |
+          echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
+          echo "ITERATION=$(cat ITERATION)" >> $GITHUB_ENV
+
+      - name: Tag version and push
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git tag "v${{ env.VERSION }}-${{ env.ITERATION }}" --force
+          git push origin "v${{ env.VERSION }}-${{ env.ITERATION }}" --tag --force
+
+      - name: Build
+        run: |
+          git clone -b "poppy-filters-v${{ env.VERSION }}" https://github.com/hashlookup/poppy.git
+          cd poppy
+          RUSTFLAGS="-Ctarget-feature=+crt-static" cargo-1.85 build --release --bins --target x86_64-unknown-linux-gnu
+
+      - name: Make DEB release directory
+        env:
+          Build_Version: ${{ github.run_id }}.${{ github.run_number }}.${{ github.run_attempt }}
+        run: |
+          mkdir release
+          mkdir release/usr
+          mkdir release/usr/bin
+          mkdir release/usr/share
+          mkdir release/usr/share/poppy
+          cp poppy/target/x86_64-unknown-linux-gnu/release/poppy release/usr/bin/
+          cp poppy/LICENSE release/usr/share/poppy/
+          cp poppy/README.md release/usr/share/poppy/
+          ls -ailR release
+
+      - name: Package DEB
+        continue-on-error: false
+        uses: bpicode/github-action-fpm@v0.9.3
+        with:
+          fpm_args: '.'
+          fpm_opts: '-t deb -v ${{ env.VERSION }} --iteration ${{ env.ITERATION }} -C release ${{ env.COMMON_FPM_OPTS }} ${{ env.DEB_FPM_OPTS }}'
+
+      - name: Release
+        continue-on-error: false
+        uses: softprops/action-gh-release@v2.0.6
+        with:
+          tag_name: v${{ env.VERSION }}-${{ env.ITERATION }}
+          name: |
+            ${{ env.VERSION }}-${{ env.ITERATION }}
+          files: |
+            ./*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Increment the value inside ITERATION
+        continue-on-error: false
+        run: |
+          bash ./up_iteration.sh
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git commit -m "increment the ITERATION" ITERATION
+          git push origin
